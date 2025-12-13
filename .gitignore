@@ -5,7 +5,7 @@
 # JWT and Security
 /api/config/jwt_secret.key
 /api/config/jwt_refresh.key
-/api/config/database.php
+
 
 
 # Debug logs
