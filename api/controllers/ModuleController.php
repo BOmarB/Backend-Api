@@ -1,5 +1,5 @@
 <?php
-include_once '../models/Module.php';
+include_once __DIR__ . '/../models/Module.php';
 
 class ModuleController
 {

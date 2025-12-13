@@ -1,6 +1,6 @@
 <?php
-include_once '../models/User.php';
-require_once '../config/jwt_config.php';
+include_once __DIR__ . '/../models/User.php';
+require_once __DIR__ . '/../config/jwt_config.php';
 
 use \Firebase\JWT\JWT;
 use \Firebase\JWT\Key;

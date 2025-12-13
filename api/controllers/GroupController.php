@@ -1,5 +1,5 @@
 <?php
-include_once '../models/Group.php';
+include_once __DIR__ . '/../models/Group.php';
 
 class GroupController
 {

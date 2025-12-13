@@ -1,5 +1,5 @@
 <?php
-include_once '../models/Exam.php';
+include_once __DIR__ . '/../models/Exam.php';
 class ExamController
 {
   private $exam;

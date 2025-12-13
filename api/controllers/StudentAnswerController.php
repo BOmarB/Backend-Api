@@ -1,6 +1,6 @@
 <?php
 
-include_once '../models/StudentAnswer.php';
+include_once __DIR__ . '/../models/StudentAnswer.php';
 
 
 class StudentAnswerController

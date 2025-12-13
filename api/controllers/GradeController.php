@@ -1,7 +1,7 @@
 <?php
 
 
-include_once '../models/Grade.php';
+include_once __DIR__ . '/../models/Grade.php';
 class GradeController
 {
   private $grade;

@@ -1,5 +1,5 @@
 <?php
-include_once '../models/Notification.php';
+include_once __DIR__ . '/../models/Notification.php';
 
 class NotificationController
 {

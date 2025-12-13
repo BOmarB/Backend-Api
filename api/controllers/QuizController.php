@@ -1,5 +1,5 @@
 <?php
-include_once '../models/Quiz.php';
+include_once __DIR__ . '/../models/Quiz.php';
 
 class QuizController
 {

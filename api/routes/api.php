@@ -1,35 +1,36 @@
 <?php
-
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Origin: http://localhost:3000");
+header("Access-Control-Allow-Origin: https://examlyfront.vercel.app");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Allow-Credentials: true");
+header("Content-Type: application/json; charset=UTF-8");
 
+// Handle preflight OPTIONS request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
+require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../middleware/JWTMiddleware.php';
 session_start();
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-require_once __DIR__ . '/../../vendor/autoload.php';
-
-include_once '../config/database.php';
-include_once '../middleware/JWTMiddleware.php';
-include_once '../controllers/UserController.php';
-include_once '../controllers/ExamController.php';
-include_once '../controllers/QuestionController.php';
-include_once '../controllers/GroupController.php';
-include_once '../controllers/ModuleController.php';
-include_once '../controllers/ProfileController.php';
-include_once '../controllers/QuizController.php';
-include_once '../controllers/StudentAnswerController.php';
-include_once '../controllers/GradeController.php';
-include_once '../controllers/NotificationController.php';
 
 
+
+include_once __DIR__ . '/../controllers/UserController.php';
+include_once __DIR__ . '/../controllers/ExamController.php';
+include_once __DIR__ . '/../controllers/QuestionController.php';
+include_once __DIR__ . '/../controllers/GroupController.php';
+include_once __DIR__ . '/../controllers/ModuleController.php';
+include_once __DIR__ . '/../controllers/ProfileController.php';
+include_once __DIR__ . '/../controllers/QuizController.php';
+include_once __DIR__ . '/../controllers/StudentAnswerController.php';
+include_once __DIR__ . '/../controllers/GradeController.php';
+include_once __DIR__ . '/../controllers/NotificationController.php';
 
 $db = database::connect();
 $userController = new UserController($db);
@@ -43,30 +44,35 @@ $studentAnswerController = new StudentAnswerController($db);
 $gradeController = new GradeController($db);
 $notificationController = new NotificationController($db);
 
+// ✅ FIXED ROUTING LOGIC - More reliable URL parsing
+$request_uri = $_SERVER['REQUEST_URI'];
+$request_uri = strtok($request_uri, '?'); // Remove query string
+$request_uri = trim($request_uri, '/');
+$request_path = explode('/', $request_uri);
 
-
-$request_uri = trim($_SERVER['REQUEST_URI'], '/');
-$script_name = trim($_SERVER['SCRIPT_NAME'], '/');
-$request_path = str_replace($script_name, '', $request_uri);
-$request_path = trim($request_path, '/');
-$request = explode('/', $request_path);
+// Get first segment (the route)
+$route = $request_path[0] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Define public routes
+// Debug - Remove after testing
+error_log("Route: $route | Method: $method | Full path: " . json_encode($request_path));
+
+// ✅ Define public routes (NO JWT required)
 $publicRoutes = [
     'login' => ['POST'],
     'refresh-token' => ['POST'],
     'add-user' => ['POST'],
+    'test' => ['GET'],
 ];
 
-// Check if the current route requires authentication
-$currentRoute = $request[0];
+// ✅ Check if the current route requires authentication
 $requiresAuth = true;
 
-if (isset($publicRoutes[$currentRoute]) && in_array($method, $publicRoutes[$currentRoute])) {
+if (isset($publicRoutes[$route]) && in_array($method, $publicRoutes[$route])) {
     $requiresAuth = false;
 }
 
+// ✅ Only verify JWT for protected routes
 if ($requiresAuth) {
     $decoded = JWTMiddleware::verifyToken();
     if (!$decoded) {
@@ -78,257 +84,254 @@ if ($requiresAuth) {
     $userRole = $decoded->role;
 }
 
-// die($request[0]  );
+// ✅ ROUTES - Using $route instead of $request[0]
 switch (true) {
-    // Public routes
-    case $request[0] === 'add-user' && $method === 'POST':
+    // ========================================
+    // PUBLIC ROUTES (No authentication needed)
+    // ========================================
+    case $route === 'test' && $method === 'GET':
+        echo json_encode([
+            'success' => true,
+            'message' => 'API is working!',
+            'route' => $route,
+            'method' => $method
+        ]);
+        break;
+    case $route === 'add-user' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($userController->addUsers($data));
         break;
 
-    case $request[0] === 'login' && $method === 'POST':
+    case $route === 'login' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($userController->login($data));
         break;
 
-    case $request[0] === 'refresh-token' && $method === 'POST':
+    case $route === 'refresh-token' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($userController->refreshToken($data));
         break;
-    // Protected routes
-    case $request[0] === 'attempt-details2' && $method === 'GET' && isset($request[1]):
-        // if ($userRole !== 'admin' && $userId !== $request[1]) {
-        //     http_response_code(403);
-        //     echo json_encode(['message' => 'Unauthorized access']);
-        //     break;
-        // }
-        echo json_encode($studentAnswerController->getAttemptDetails($request[1]));
-        break;
-    case $request[0] === 'update-attempt' && $method === 'GET' && isset($request[1]):
 
-        echo json_encode($studentAnswerController->updateAttemptScore($request[1]));
+    // ========================================
+    // PROTECTED ROUTES (Authentication required)
+    // ========================================
+    
+    case $route === 'attempt-details2' && $method === 'GET' && isset($request_path[1]):
+        echo json_encode($studentAnswerController->getAttemptDetails($request_path[1]));
         break;
-    case $request[0] === 'attempt-details3' && $method === 'GET':
+        
+    case $route === 'update-attempt' && $method === 'GET' && isset($request_path[1]):
+        echo json_encode($studentAnswerController->updateAttemptScore($request_path[1]));
+        break;
+        
+    case $route === 'attempt-details3' && $method === 'GET':
         echo json_encode($gradeController->getAttemptDetails());
         break;
 
-    case $request[0] === 'update-score' && $method === 'POST':
+    case $route === 'update-score' && $method === 'POST':
         $data = json_decode(file_get_contents('php://input'), true);
         echo json_encode($gradeController->updateScore($data['attemptId'], $data['score']));
         break;
-    case $request[0] === 'create-quiz' && $method === 'POST':
+        
+    case $route === 'create-quiz' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($quizController->createQuiz($data));
         break;
 
-
-    case $request[0] === 'create-exam' && $method === 'POST':
+    case $route === 'create-exam' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($examController->createExam($data));
         break;
 
-    case $request[0] === 'profile' && $method === 'GET' && isset($request[1]):
-        echo json_encode($profileController->getProfile($request[1]));
+    case $route === 'profile' && $method === 'GET' && isset($request_path[1]):
+        echo json_encode($profileController->getProfile($request_path[1]));
         break;
 
-    case $request[0] === 'profile' && $method === 'PUT' && isset($request[1]):
+    case $route === 'profile' && $method === 'PUT' && isset($request_path[1]):
         $data = json_decode(file_get_contents('php://input'), true);
-        echo json_encode($profileController->updateProfile($request[1], $data));
+        echo json_encode($profileController->updateProfile($request_path[1], $data));
         break;
 
-    case $request[0] === 'create-notification' && $method === 'POST':
+    case $route === 'create-notification' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
-        $notificationController = new NotificationController($db);
         echo json_encode($notificationController->createNotification($data, $userId, $userRole));
         break;
 
-    case $request[0] === 'notifications' && $request[2] === 'publish' && $method === 'PUT':
-        $notificationId = $request[1];
-
+    case $route === 'notifications' && ($request_path[2] ?? '') === 'publish' && $method === 'PUT':
+        $notificationId = $request_path[1];
         echo json_encode($notificationController->publishNotification($notificationId, $userId));
         break;
-    case $request[0] === 'notifications' && $request[2] === 'unpublish' && $method === 'PUT':
-        $notificationId = $request[1];
+        
+    case $route === 'notifications' && ($request_path[2] ?? '') === 'unpublish' && $method === 'PUT':
+        $notificationId = $request_path[1];
         echo json_encode($notificationController->unpublishNotification($notificationId, $userId));
         break;
 
-    case strpos($request[0], 'update-notification') === 0 && $method === 'PUT':
-        $notificationId = end($request);
+    case strpos($route, 'update-notification') === 0 && $method === 'PUT':
+        $notificationId = end($request_path);
         $data = json_decode(file_get_contents("php://input"), true);
-
         echo json_encode($notificationController->updateNotification($notificationId, $data, $userId, $userRole));
         break;
 
-    case strpos($request[0], 'delete-notification') === 0 && $method === 'DELETE':
-        $notificationId = end($request);
-
+    case strpos($route, 'delete-notification') === 0 && $method === 'DELETE':
+        $notificationId = end($request_path);
         echo json_encode($notificationController->deleteNotification($notificationId, $userId, $userRole));
         break;
 
-    case $request[0] === 'user-notifications' && $method === 'GET':
-        $type = $request[1] ?? 'received';
-
+    case $route === 'user-notifications' && $method === 'GET':
+        $type = $request_path[1] ?? 'received';
         echo json_encode($notificationController->getNotifications($userId, $userRole, $type));
         break;
-    case $request[0] === 'mark-notification-read' && $method === 'POST':
-        $notificationId = $request[1];
-
+        
+    case $route === 'mark-notification-read' && $method === 'POST':
+        $notificationId = $request_path[1];
         echo json_encode($notificationController->markAsRead($notificationId, $userId));
         break;
 
-
-    case $request[0] === 'question-options' && $method === 'POST' && isset($request[1]):
+    case $route === 'question-options' && $method === 'POST' && isset($request_path[1]):
         $data = json_decode(file_get_contents('php://input'), true);
-        echo json_encode($questionController->getQuestionOptions($request[1], $data['optionIds']));
+        echo json_encode($questionController->getQuestionOptions($request_path[1], $data['optionIds']));
         break;
-    case $request[0] === 'exam-questions' && $method === 'GET' && isset($request[1]):
-        echo json_encode($questionController->getQuestionsByExam($request[1]));
+        
+    case $route === 'exam-questions' && $method === 'GET' && isset($request_path[1]):
+        echo json_encode($questionController->getQuestionsByExam($request_path[1]));
         break;
 
-
-    case $request[0] === 'exam-attempts' && $method === 'GET' && isset($request[1]):
-        echo json_encode($examController->getExamAttempts($request[1]));
+    case $route === 'exam-attempts' && $method === 'GET' && isset($request_path[1]):
+        echo json_encode($examController->getExamAttempts($request_path[1]));
         break;
-    case $request[0] === 'submit-correction' && $method === 'POST' && isset($request[1]):
+        
+    case $route === 'submit-correction' && $method === 'POST' && isset($request_path[1]):
         $data = json_decode(file_get_contents('php://input'), true);
-        echo json_encode($examController->submitCorrection($request[1], $data['answers']));
+        echo json_encode($examController->submitCorrection($request_path[1], $data['answers']));
         break;
 
-    case $request[0] === 'attempt-details' && $method === 'GET' && isset($request[1]):
-        echo json_encode($examController->getAttemptDetails($request[1]));
+    case $route === 'attempt-details' && $method === 'GET' && isset($request_path[1]):
+        echo json_encode($examController->getAttemptDetails($request_path[1]));
         break;
 
-    case $request[0] === 'update-score' && $method === 'PUT' && isset($request[1]):
+    case $route === 'update-score' && $method === 'PUT' && isset($request_path[1]):
         $data = json_decode(file_get_contents('php://input'), true);
         if (isset($data['score'])) {
-            echo json_encode($examController->updateScore($request[1], floatval($data['score'])));
+            echo json_encode($examController->updateScore($request_path[1], floatval($data['score'])));
         } else {
             echo json_encode(['success' => false, 'message' => 'Score value is missing']);
         }
         break;
 
-    case preg_match('/^student-exams\/(\d+)$/', $request_path, $matches) && $method === 'GET':
+    case preg_match('/^student-exams\/(\d+)$/', $request_uri, $matches) && $method === 'GET':
         $studentId = $matches[1];
         echo json_encode($examController->getStudentExams($studentId));
         break;
-    case preg_match('/^student-exams-grade\/(\d+)$/', $request_path, $matches) && $method === 'GET':
+        
+    case preg_match('/^student-exams-grade\/(\d+)$/', $request_uri, $matches) && $method === 'GET':
         $studentId = $matches[1];
         echo json_encode($gradeController->getStudentExamsGrade($studentId));
         break;
 
-    case $request[0] === 'validate-exam-access' && $method === 'POST':
+    case $route === 'validate-exam-access' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($examController->validateExamAccess($data['exam_id'], $data['student_id']));
         break;
-    case $request[0] === 'get-modules' && $method === 'GET':
+        
+    case $route === 'get-modules' && $method === 'GET':
         echo json_encode($moduleController->getAllModules());
         break;
 
-    case $request[0] === 'create-module' && $method === 'POST':
+    case $route === 'create-module' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($moduleController->createModule($data));
         break;
-    case $request[0] === 'v-attempt' && $method === 'POST':
+        
+    case $route === 'v-attempt' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($examController->verifyExamAttempt($data['attemptId']));
         break;
-    // case $request[0] === 'v-attempt-status' && $method === 'POST':
-    //     $data = json_decode(file_get_contents("php://input"), true);
-    //     echo json_encode($examController->verifyAttemptStatus($attamptId));
-    //     break;
 
-    case $request[0] === 'create-attempt' && $method === 'POST':
+    case $route === 'create-attempt' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($examController->createAttempt($data));
         break;
 
-    case $request[0] === 'submit-exam' && $method === 'POST':
+    case $route === 'submit-exam' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($examController->submitExam($data));
         break;
 
-
-
-
-
-    case $request[0] === 'groups' && $method === 'GET':
+    case $route === 'groups' && $method === 'GET':
         echo json_encode($groupController->getAllGroups());
         break;
 
-    case $request[0] === 'groups' && $method === 'POST':
+    case $route === 'groups' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($groupController->createGroup($data));
         break;
 
-
-    case $request[0] === 'users' && $method === 'GET':
+    case $route === 'users' && $method === 'GET':
         echo json_encode($userController->getUsers());
         break;
 
-    case $request[0] === 'users2' && $method === 'GET' && count($request) === 2:
-        $userId = $request[1];
+    case $route === 'users2' && $method === 'GET' && count($request_path) === 2:
+        $userId = $request_path[1];
         echo json_encode($userController->getUserById($userId));
         break;
 
-    case $request[0] === 'users3' && $method === 'PUT' && count($request) === 2:
-        $userId = $request[1];
+    case $route === 'users3' && $method === 'PUT' && count($request_path) === 2:
+        $userId = $request_path[1];
         $userData = json_decode(file_get_contents('php://input'), true);
         echo json_encode($userController->updateUser($userId, $userData));
         break;
 
-    case $request[0] === 'users' && $method === 'DELETE' && count($request) === 2:
-        $userId = $request[1];
+    case $route === 'users' && $method === 'DELETE' && count($request_path) === 2:
+        $userId = $request_path[1];
         echo json_encode($userController->deleteUser($userId));
         break;
 
-    case $request[0] === 'check-status' && $method === 'GET':
+    case $route === 'check-status' && $method === 'GET':
         if (!isset($_SESSION['user_id'])) {
             echo json_encode(['error' => 'User is not logged in.']);
-            exit; // Stop further execution
+            exit;
         }
         $userId = $_SESSION['user_id'];
         echo json_encode($userController->checkUserStatus($userId));
         break;
-    case $request[0] === 'users' && $request[1] === 'permissions' && $method === 'PUT':
+        
+    case $route === 'users' && ($request_path[1] ?? '') === 'permissions' && $method === 'PUT':
         $data = json_decode(file_get_contents('php://input'), true);
         echo json_encode($userController->updatePermissions($data));
         break;
-    case $request[0] === 'create-exam' && $method === 'POST':
-        $data = json_decode(file_get_contents("php://input"), true);
-        $data['teacher_id'] = $userId;
-        echo json_encode($examController->createExam($data));
-        break;
-    case $request[0] === 'toggle-exam-status' && isset($request[1]) && $method === 'POST':
+
+    case $route === 'toggle-exam-status' && isset($request_path[1]) && $method === 'POST':
         $data = json_decode(file_get_contents('php://input'), true);
-        echo json_encode($examController->toggleExamStatus($request[1], $data['status']));
+        echo json_encode($examController->toggleExamStatus($request_path[1], $data['status']));
         break;
-    case $request[0] === 'delete-exam' && isset($request[1]) && $method === 'DELETE':
-        echo json_encode($examController->deleteExam($request[1]));
+        
+    case $route === 'delete-exam' && isset($request_path[1]) && $method === 'DELETE':
+        echo json_encode($examController->deleteExam($request_path[1]));
         break;
-    case $request[0] === 'teacher-exams' && isset($request[1]) && $method === 'GET':
-        echo json_encode($examController->getExamsByTeacher($request[1]));
+        
+    case $route === 'teacher-exams' && isset($request_path[1]) && $method === 'GET':
+        echo json_encode($examController->getExamsByTeacher($request_path[1]));
         break;
-    case $request[0] === 'create-question' && $method === 'POST':
+        
+    case $route === 'create-question' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($questionController->createQuestion($data));
         break;
 
-
-    case $request[0] === 'exam' && isset($request[1]) && $method === 'GET':
+    case $route === 'exam' && isset($request_path[1]) && $method === 'GET':
         $teacher_id = $_GET['teacher_id'] ?? null;
         if (!$teacher_id) {
             echo json_encode(['success' => false, 'message' => 'Teacher ID required']);
             break;
         }
-        echo json_encode($examController->getExamById($request[1], $teacher_id));
+        echo json_encode($examController->getExamById($request_path[1], $teacher_id));
         break;
 
-    case $request[0] === 'update-exam' && $method === 'POST':
+    case $route === 'update-exam' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
-        // Debug: Log the request data
         error_log("Update Exam Request: " . json_encode($data));
 
-        // Ensure we have all required data
         if (!isset($data['id']) || !isset($data['teacher_id'])) {
             echo json_encode([
                 'success' => false,
@@ -337,25 +340,22 @@ switch (true) {
             break;
         }
 
-        // Call the controller method
         $result = $examController->updateExam($data);
-
-        // Debug: Log the response
         error_log("Update Exam Response: " . json_encode($result));
-
         echo json_encode($result);
         break;
-    case $request[0] === 'start-exam' && $method === 'POST':
+        
+    case $route === 'start-exam' && $method === 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
         echo json_encode($examController->startExam($data));
         break;
 
-
     default:
-        echo json_encode(['message' => 'Route not found']);
+        http_response_code(404);
+        echo json_encode(['message' => 'Route not found', 'route' => $route, 'method' => $method]);
 }
 
-// Add error handling
+// Error handling
 function handleError($errno, $errstr, $errfile, $errline)
 {
     http_response_code(500);
